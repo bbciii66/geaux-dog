@@ -393,9 +393,18 @@ function drawBG(){
   // light poles
   ctx.fillStyle='rgba(255,255,255,.07)';
   ctx.fillRect(W*0.16-3,H*0.10,6,H*0.16); ctx.fillRect(W*0.84-3,H*0.10,6,H*0.16);
-  ctx.fillStyle=geaux?'rgba(255,240,180,.85)':'rgba(255,240,180,.55)';
-  ctx.beginPath(); ctx.arc(W*0.16,H*0.10,11,0,6.283); ctx.fill();
-  ctx.beginPath(); ctx.arc(W*0.84,H*0.10,11,0,6.283); ctx.fill();
+  (function(){
+    var lamps=[W*0.16,W*0.84];
+    for(var li=0;li<2;li++){
+      var lxp=lamps[li], lyp=H*0.10;
+      var lg=ctx.createRadialGradient(lxp,lyp,2,lxp,lyp,38);
+      lg.addColorStop(0,geaux?'rgba(255,238,170,.95)':'rgba(255,238,170,.78)');
+      lg.addColorStop(.35,geaux?'rgba(255,215,94,.34)':'rgba(255,215,94,.22)');
+      lg.addColorStop(1,'rgba(255,215,94,0)');
+      ctx.fillStyle=lg; ctx.beginPath(); ctx.arc(lxp,lyp,38,0,6.283); ctx.fill();
+      ctx.fillStyle='#FFF3C4'; ctx.beginPath(); ctx.arc(lxp,lyp,8.5,0,6.283); ctx.fill();
+    }
+  })();
   // skyline
   var base=GROUND()+22;
   for(var i=0;i<sky.length;i++){
@@ -607,10 +616,12 @@ function draw(){
 // idle attract animation behind the title
 function drawAttract(t){
   drawBG();
-  ctx.save(); ctx.globalAlpha=0.5;
-  for(var i=0;i<5;i++){
-    var x=(W*(0.13+i*0.19)+Math.sin(t*0.6+i)*22);
-    var y=((t*70+i*150)%(H+180))-90;
+  ctx.save(); ctx.globalAlpha=0.30;
+  for(var i=0;i<6;i++){
+    // hug the outer edges so falling props never sit on top of the title copy
+    var side=(i%2===0)?1:-1, lane=0.09+(Math.floor(i/2)*0.055);
+    var x=(side>0? W*lane : W*(1-lane)) + Math.sin(t*0.6+i)*14;
+    var y=((t*66+i*140)%(H+200))-100;
     ctx.save(); ctx.translate(x,y); ctx.rotate(t+i);
     drawItemRaw(i%2===0?'crawfish':'football',18); ctx.restore();
   }
