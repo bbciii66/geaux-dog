@@ -12,10 +12,15 @@
 html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;background:#12071f;
   font-family:'Trebuchet MS','Avenir Next',Verdana,sans-serif;-webkit-user-select:none;user-select:none;}
 body{position:fixed;inset:0;touch-action:none;}
+#safe{position:fixed;top:0;left:0;width:0;height:0;pointer-events:none;visibility:hidden;
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+  padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px);}
 #wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;}
 canvas{display:block;width:100%;height:100%;touch-action:none;}
 .screen{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
-  text-align:center;padding:24px 22px;z-index:10;}
+  text-align:center;z-index:10;
+  padding:calc(24px + env(safe-area-inset-top,0px)) calc(22px + env(safe-area-inset-right,0px))
+          calc(24px + env(safe-area-inset-bottom,0px)) calc(22px + env(safe-area-inset-left,0px));}
 .hidden{display:none!important;}
 #title .logo{font-size:clamp(44px,15vw,86px);font-weight:900;letter-spacing:-2px;line-height:.88;
   color:#FFC72C;text-shadow:0 4px 0 #7A3FAF,0 8px 24px rgba(0,0,0,.7);transform:rotate(-3deg);margin-bottom:6px;}
@@ -41,6 +46,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;}
 </style>
 </head>
 <body>
+<div id="safe" aria-hidden="true"></div>
 <div id="wrap"><canvas id="c"></canvas></div>
 
 <div id="title" class="screen">
@@ -67,13 +73,23 @@ canvas{display:block;width:100%;height:100%;touch-action:none;}
 (function(){
 // ───────────────────────────── setup ─────────────────────────────
 var cv=document.getElementById('c'), ctx=cv.getContext('2d',{alpha:false});
-var W=0,H=0,DPR=1;
+var W=0,H=0,DPR=1, SAFE={t:0,b:0,l:0,r:0};
+function readSafe(){
+  try{
+    var el=document.getElementById('safe'); if(!el) return;
+    var cs=getComputedStyle(el);
+    SAFE.t=parseFloat(cs.paddingTop)||0;  SAFE.b=parseFloat(cs.paddingBottom)||0;
+    SAFE.l=parseFloat(cs.paddingLeft)||0; SAFE.r=parseFloat(cs.paddingRight)||0;
+  }catch(e){}
+}
 function resize(){
   DPR=Math.min(window.devicePixelRatio||1,2.5);
   W=Math.max(1,window.innerWidth); H=Math.max(1,window.innerHeight);
   cv.width=Math.round(W*DPR); cv.height=Math.round(H*DPR);
   cv.style.width=W+'px'; cv.style.height=H+'px';
   ctx.setTransform(DPR,0,0,DPR,0,0);
+  readSafe();
+  if(dog) dog.w=Math.max(54,Math.min(84,W*0.17));
   buildSkyline();
 }
 window.addEventListener('resize',resize);
@@ -83,7 +99,11 @@ window.addEventListener('orientationchange',function(){setTimeout(resize,250);})
 var AC=null, muted=false;
 function audioInit(){
   if(AC) return;
-  try{ var C=window.AudioContext||window.webkitAudioContext; if(!C) return; AC=new C(); }catch(e){ AC=null; }
+  try{ var C=window.AudioContext||window.webkitAudioContext; if(!C) return; AC=new C();
+    if(AC.state==='suspended'&&AC.resume) AC.resume();
+    var b=AC.createBuffer(1,1,22050),src=AC.createBufferSource();
+    src.buffer=b; src.connect(AC.destination); src.start(0);
+  }catch(e){ AC=null; }
 }
 function blip(freq,dur,type,vol,slideTo){
   if(!AC||muted) return;
@@ -106,7 +126,7 @@ var dog, items, parts, floats, score, lives, combo, bestCombo, boil, geaux, geau
     level, spawnT, spawnGap, shake, timeAlive, caught, missed, flash, hurtT, started;
 var best = (function(){ try{ return parseInt(localStorage.getItem('geauxdog_best')||'0',10)||0; }catch(e){ return 0; } })();
 
-var GROUND=function(){ return H-Math.max(74,H*0.11); };
+var GROUND=function(){ return H-SAFE.b-Math.max(74,H*0.11); };
 
 function reset(){
   dog={x:W/2,y:0,vx:0,tx:W/2,w:0,tilt:0,sq:1,blink:0,bark:0};
@@ -200,7 +220,8 @@ function floatTxt(x,y,txt,color,size){
 
 // ───────────────────────────── game flow ─────────────────────────────
 function startGame(){
-  audioInit(); resize(); reset();
+  audioInit(); try{ if(AC&&AC.state==='suspended'&&AC.resume) AC.resume(); }catch(e){}
+  resize(); reset();
   STATE='play'; started=Date.now();
   document.getElementById('title').classList.add('hidden');
   document.getElementById('over').classList.add('hidden');
@@ -245,7 +266,7 @@ document.querySelector('#title .logo').addEventListener('click',function(){
 function update(dt){
   timeAlive+=dt;
   // difficulty
-  level=Math.floor(score/300);
+  level=Math.floor(score/250);
   spawnGap=Math.max(0.30,0.90-level*0.052);
 
   // dog movement
@@ -391,7 +412,7 @@ function drawBG(){
   ctx.fillStyle='rgba(255,255,255,.05)'; ctx.fillRect(0,GROUND()+22,W,3);
 }
 function drawDog(){
-  var x=dog.x,y=dog.y,w=dog.w,h=w*0.78*dog.sq, bw=w*dog.sq>1?w:w;
+  var x=dog.x,y=dog.y,w=dog.w,h=w*0.78*dog.sq;
   ctx.save(); ctx.translate(x,y); ctx.rotate(dog.tilt*0.5);
   var hurt = hurtT>0 && (Math.floor(hurtT*18)%2===0);
   var body=hurt?'#FF9E9E':'#E8913F', light=hurt?'#FFC9C9':'#F7B96B';
@@ -522,13 +543,13 @@ function drawHUD(){
   ctx.fillStyle='#fff'; ctx.font='900 '+Math.round(Math.min(38,W*0.095))+'px Trebuchet MS, sans-serif';
   ctx.textAlign='left'; ctx.textBaseline='top';
   ctx.shadowColor='rgba(0,0,0,.6)'; ctx.shadowBlur=6; ctx.shadowOffsetY=2;
-  ctx.fillText(String(score),16,14+(window.screenTopInset||0));
+  ctx.fillText(String(score),16+SAFE.l,12+SAFE.t);
   ctx.shadowBlur=0; ctx.shadowOffsetY=0;
   ctx.fillStyle='#C9B3E8'; ctx.font='700 12px Trebuchet MS, sans-serif';
-  ctx.fillText('BEST '+Math.max(best,score),17,14+Math.min(38,W*0.095)+2);
+  ctx.fillText('BEST '+Math.max(best,score),17+SAFE.l,12+SAFE.t+Math.min(38,W*0.095)+2);
   // lives (paws)
   for(var i=0;i<3;i++){
-    var lx=W-22-i*26, ly=26, on=(i<lives);
+    var lx=W-22-SAFE.r-i*26, ly=24+SAFE.t, on=(i<lives);
     ctx.fillStyle=on?'#FF8FA3':'rgba(255,255,255,.16)';
     ctx.beginPath(); ctx.ellipse(lx,ly,7.5,6.5,0,0,6.283); ctx.fill();
     for(var t=0;t<3;t++){ ctx.beginPath();
@@ -539,10 +560,10 @@ function drawHUD(){
   if(mult>1){
     ctx.textAlign='center'; ctx.fillStyle=geaux?'#FFF3B0':'#7CFF9E';
     ctx.font='900 '+Math.round(Math.min(22,W*0.056))+'px Trebuchet MS, sans-serif';
-    ctx.fillText('x'+(mult*(geaux?2:1)),W/2,16);
+    ctx.fillText('x'+(mult*(geaux?2:1)),W/2,14+SAFE.t);
   }
   // boil meter
-  var bw=Math.min(W-40,300), bx=(W-bw)/2, by=H-Math.max(30,H*0.045), bh=13;
+  var bw=Math.min(W-40-SAFE.l-SAFE.r,300), bx=(W-bw)/2, by=H-SAFE.b-Math.max(30,H*0.045), bh=13;
   ctx.fillStyle='rgba(0,0,0,.42)'; rr(bx,by,bw,bh,bh/2); ctx.fill();
   var pct = geaux ? Math.max(0,geauxT/8) : boil/100;
   var bg2=ctx.createLinearGradient(bx,0,bx+bw,0);
@@ -608,10 +629,10 @@ function frame(ts){
 }
 document.addEventListener('visibilitychange',function(){ last=0; });
 
-resize(); reset(); requestAnimationFrame(frame);
+readSafe(); resize(); reset(); requestAnimationFrame(frame);
 window.__geaux={get state(){return STATE;},get score(){return score;},get lives(){return lives;},
   get items(){return items.length;},get combo(){return combo;},get geaux(){return geaux;},
-  get boil(){return boil;},get best(){return best;},
+  get boil(){return boil;},get best(){return best;},get safe(){return SAFE;},
   start:startGame,
   setDog:function(x){ if(dog){dog.tx=x;dog.x=x;} },
   forceSpawn:function(k){ var K=KINDS[k]; items.push({k:k,x:dog.x,y:dog.y-dog.w*0.30-6,vy:0,vx:0,rot:0,vr:0,r:K.r,dead:false}); },
