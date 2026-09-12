@@ -200,7 +200,7 @@ function spawn(){
   var m=K.r+10;
   items.push({
     k:k, x:m+Math.random()*(W-m*2), y:-40,
-    vy:(168+level*26)*K.sp*(0.9+Math.random()*0.25),
+    vy:(168+Math.min(level,12)*26)*K.sp*(0.9+Math.random()*0.25),
     vx:(Math.random()-0.5)*30,
     rot:Math.random()*6.28, vr:(Math.random()-0.5)*4.5, r:K.r, dead:false
   });
@@ -268,7 +268,8 @@ function update(dt){
   timeAlive+=dt;
   // difficulty
   level=Math.floor(score/250);
-  spawnGap=Math.max(0.30,0.90-level*0.052);
+  var dlev=Math.min(level,12);   // difficulty cap: keeps items catchable
+  spawnGap=Math.max(0.34,0.90-dlev*0.052);
 
   // dog movement
   if(keyL) dog.tx-=560*dt; if(keyR) dog.tx+=560*dt;
@@ -302,13 +303,17 @@ function update(dt){
       var mdx=dog.x-it.x, md=Math.abs(mdx);
       if(md<170 && it.y>H*0.30) it.x += Math.sign(mdx)*Math.min(md,300*dt);
     }
+    var prevY=it.y;
     it.y+=it.vy*dt; it.x+=it.vx*dt; it.rot+=it.vr*dt;
     if(it.x<it.r){it.x=it.r;it.vx=Math.abs(it.vx);}
     if(it.x>W-it.r){it.x=W-it.r;it.vx=-Math.abs(it.vx);}
 
     // collision with dog (generous, forgiving hitbox)
     var hy=Math.abs(it.y-catchY), hx=Math.abs(it.x-dog.x);
-    if(hy < it.r+dog.w*0.30 && hx < it.r+dog.w*0.46 && !it.dead && !ending){
+    var band=it.r+dog.w*0.30;
+    // swept test: did the item pass through the catch band between frames?
+    var crossed=(prevY-band<=catchY && it.y+band>=catchY);
+    if((hy<band || crossed) && hx < it.r+dog.w*0.46 && !it.dead && !ending){
       it.dead=true; items.splice(i,1);
       if(K.good){
         caught++; combo++; if(combo>bestCombo) bestCombo=combo;
