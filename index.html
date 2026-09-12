@@ -121,7 +121,7 @@ function blip(freq,dur,type,vol,slideTo){
 function chord(list,dur,vol){ for(var i=0;i<list.length;i++) blip(list[i],dur,'triangle',vol||0.07); }
 
 // ───────────────────────────── state ─────────────────────────────
-var STATE='title';
+var STATE='title', ending=false;
 var dog, items, parts, floats, score, lives, combo, bestCombo, boil, geaux, geauxT,
     level, spawnT, spawnGap, shake, timeAlive, caught, missed, flash, hurtT, started;
 var best = (function(){ try{ return parseInt(localStorage.getItem('geauxdog_best')||'0',10)||0; }catch(e){ return 0; } })();
@@ -135,7 +135,7 @@ function reset(){
   items=[]; parts=[]; floats=[];
   score=0; lives=3; combo=0; bestCombo=0; boil=0; geaux=false; geauxT=0;
   level=0; spawnT=0.5; spawnGap=0.9; shake=0; timeAlive=0; caught=0; missed=0;
-  flash=0; hurtT=0;
+  flash=0; hurtT=0; ending=false;
 }
 
 // ───────────────────────────── input ─────────────────────────────
@@ -234,7 +234,8 @@ var QUIPS_MID=["Respectable. Your uncle is only mildly critical.","Solid showing
 var QUIPS_HIGH=["They're chanting your name. Or a similar name.","Roux has been offered a scholarship.",
   "Someone just painted you on a cooler.","Local legend. Parade pending.","You have peaked. Go outside."];
 function endGame(){
-  STATE='over';
+  if(STATE==='over') return;   // idempotent
+  STATE='over'; ending=true;
   var isNew=score>best;
   if(isNew){ best=score; try{localStorage.setItem('geauxdog_best',String(best));}catch(e){} }
   var q = score<250?QUIPS_LOW : (score<1200?QUIPS_MID:QUIPS_HIGH);
@@ -307,7 +308,7 @@ function update(dt){
 
     // collision with dog (generous, forgiving hitbox)
     var hy=Math.abs(it.y-catchY), hx=Math.abs(it.x-dog.x);
-    if(hy < it.r+dog.w*0.30 && hx < it.r+dog.w*0.46 && !it.dead){
+    if(hy < it.r+dog.w*0.30 && hx < it.r+dog.w*0.46 && !it.dead && !ending){
       it.dead=true; items.splice(i,1);
       if(K.good){
         caught++; combo++; if(combo>bestCombo) bestCombo=combo;
@@ -354,13 +355,14 @@ function update(dt){
   if(hurtT>0) hurtT=Math.max(0,hurtT-dt);
 }
 function hit(x,y,kind){
-  lives--; combo=0; shake=14; hurtT=0.55;
+  if(STATE!=='play'||ending) return;          // ignore hits once the run is ending
+  lives=Math.max(0,lives-1); combo=0; shake=14; hurtT=0.55;
   boil=Math.max(0,boil-28);
   burst(x,y,kind==='flag'?'#FFE14D':'#9FD4FF',18,190);
   floatTxt(dog.x,y-34,kind==='flag'?'FLAG!':'OW.','#FF7A7A',26);
   dog.sq=0.66;
   blip(220,0.16,'sawtooth',0.11,80);
-  if(lives<=0) setTimeout(endGame,340);
+  if(lives<=0 && !ending){ ending=true; setTimeout(endGame,340); }
 }
 
 // ───────────────────────────── drawing ─────────────────────────────
@@ -632,7 +634,7 @@ document.addEventListener('visibilitychange',function(){ last=0; });
 readSafe(); resize(); reset(); requestAnimationFrame(frame);
 window.__geaux={get state(){return STATE;},get score(){return score;},get lives(){return lives;},
   get items(){return items.length;},get combo(){return combo;},get geaux(){return geaux;},
-  get boil(){return boil;},get best(){return best;},get safe(){return SAFE;},
+  get boil(){return boil;},get best(){return best;},get safe(){return SAFE;},get ending(){return ending;},
   start:startGame,
   setDog:function(x){ if(dog){dog.tx=x;dog.x=x;} },
   forceSpawn:function(k){ var K=KINDS[k]; items.push({k:k,x:dog.x,y:dog.y-dog.w*0.30-6,vy:0,vx:0,rot:0,vr:0,r:K.r,dead:false}); },
